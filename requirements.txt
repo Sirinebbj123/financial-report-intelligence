@@ -1,0 +1,33 @@
+# --- Cœur ---
+pydantic>=2.6
+python-dotenv>=1.0
+
+# --- Rôle 1 : ingestion & retrieval ---
+pymupdf>=1.24
+pdfplumber>=0.11
+sentence-transformers>=3.0
+chromadb>=0.5
+rank-bm25>=0.2.2
+huggingface-hub>=0.24
+datasets>=2.20
+
+# --- Rôle 2 : agent & MCP ---
+langchain>=0.3
+langchain-community>=0.3
+langgraph>=0.2
+langchain-openai>=0.2      # ou langchain-groq / langchain-mistralai / langchain-ollama selon le fournisseur
+mcp>=1.2
+
+# --- Rôle 3 : évaluation & fine-tuning ---
+pandas>=2.2
+numpy>=1.26
+
+# --- Rôle 4 : API & web ---
+fastapi>=0.115
+uvicorn[standard]>=0.30
+streamlit>=1.38
+requests>=2.32
+
+# --- Dev ---
+pytest>=8.0
+ruff>=0.6
