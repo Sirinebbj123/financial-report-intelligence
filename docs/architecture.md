@@ -5,6 +5,7 @@ L'agent LangGraph est le centre du système : il reçoit la question depuis l'in
 ## Flux
 
 1. **Indexation** (`fri.ingestion`) : chaque page de PDF devient un ou plusieurs chunks qui gardent leurs métadonnées (société, année, type, page).
+   Lecture des PDF page par page : voir [`ingestion.md`](ingestion.md).
 2. **Recherche hybride** (`fri.retrieval`) : BM25 pour les termes exacts, vecteurs pour le sens, fusion RRF, filtres société / année avant la recherche.
 3. **Outils MCP** (`fri.mcp_server`) : `search_filings`, `get_financial_metric`, `compare_years`.
 4. **Agent** (`fri.agent`) : routage simple / calcul / comparaison, réponse citée.
