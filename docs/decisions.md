@@ -9,3 +9,6 @@
 | | Mode `layout` par défaut : lignes reconstruites à partir des coordonnées des mots | Les lignes des tableaux financiers restent entières (libellé + valeurs), utile pour BM25 et l'extraction de métriques |
 | | Numéro de page 1-indexé, jamais renuméroté (pages vides ignorées sans décalage) | La citation `[Société, Année, p. X]` doit pointer la bonne page ; FinanceBench `evidence_page_num` = `page - 1` |
 | | Retrait des en-têtes / pieds de page répétés : optionnel (`strip_boilerplate`) | Garder le texte fidèle par défaut ; à activer à l'indexation si le benchmark montre un gain |
+| | Détection des colonnes de texte par gouttière verticale, avec garde-fous « texte courant » | Lire une page en deux colonnes dans le bon ordre sans jamais casser une ligne de tableau (12 pages changées sur 5 194) |
+| | Tableaux reconstruits à partir des mots (libellé + nombres alignés à droite), pas avec `find_tables()` | `find_tables()` colle les mots et coupe les nombres sur les PDF FinanceBench |
+| | Cache JSONL des pages, clé = SHA-256 du PDF + options + `CACHE_VERSION` | Ne pas reparser les PDF à chaque indexation, sans risque de relire un cache périmé |
