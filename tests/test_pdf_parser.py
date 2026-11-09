@@ -301,8 +301,19 @@ def _tokens(text: str) -> set[str]:
     return set(re.findall(r"\w+", text.lower()))
 
 
+def _flat(text: str) -> str:
+    # Certaines preuves FinanceBench collent les mots ("cashandcashequivalents") :
+    # on compare donc sans espaces ni ponctuation.
+    return re.sub(r"\W", "", text.lower())
+
+
 def test_financebench_evidence_is_on_cited_page():
-    """La page de preuve FinanceBench (0-indexée) doit être notre page index + 1."""
+    """Chaque preuve FinanceBench doit se trouver sur la page que l'on citerait.
+
+    ``evidence_page_num`` est 0-indexé : la page attendue est donc ``Page.index + 1``.
+    On vérifie (1) que les mots de la preuve sont sur cette page et (2) qu'aucune autre
+    page du document ne ressemble davantage à la preuve.
+    """
     pytest.importorskip("pymupdf")
     questions_path = DATA_DIR / "financebench_open_source.jsonl"
     pdf_dir = DATA_DIR / "pdfs"
@@ -311,18 +322,32 @@ def test_financebench_evidence_is_on_cited_page():
 
     questions = [json.loads(line) for line in questions_path.read_text("utf-8").splitlines()]
     available = {p.stem for p in pdf_dir.glob("*.pdf")}
-    evidences = [
-        (q["doc_name"], e) for q in questions if q["doc_name"] in available for e in q["evidence"]
-    ][:30]
-    if not evidences:
+    by_doc: dict[str, list[dict]] = {}
+    for q in questions:
+        if q["doc_name"] in available:
+            by_doc.setdefault(q["doc_name"], []).extend(q["evidence"])
+    if not by_doc:
         pytest.skip("Aucun PDF FinanceBench téléchargé")
 
-    cache: dict[str, dict[int, Page]] = {}
-    for doc_name, evidence in evidences:
-        if doc_name not in cache:
-            cache[doc_name] = {p.page: p for p in parse_pdf(pdf_dir / f"{doc_name}.pdf")}
-        page = cache[doc_name].get(evidence["evidence_page_num"] + 1)
-        assert page is not None, f"{doc_name} p. {evidence['evidence_page_num'] + 1} vide"
-        expected = _tokens(evidence["evidence_text"])
-        coverage = len(expected & _tokens(page.text)) / max(len(expected), 1)
-        assert coverage > 0.9, f"{doc_name} p. {page.page} : couverture {coverage:.0%}"
+    failures: list[str] = []
+    n_checked = 0
+    for doc_name, evidences in by_doc.items():
+        pages = {p.page: p for p in parse_pdf(pdf_dir / f"{doc_name}.pdf", skip_empty=False)}
+        page_tokens = {n: _tokens(p.text) for n, p in pages.items()}
+        for evidence in evidences:
+            n_checked += 1
+            cited = evidence["evidence_page_num"] + 1
+            words = _tokens(evidence["evidence_text"])
+            if cited not in pages or not words:
+                failures.append(f"{doc_name} p. {cited} : page absente")
+                continue
+            flat_page = _flat(pages[cited].text)
+            coverage = sum(w in flat_page for w in words) / len(words)
+            best = max(page_tokens, key=lambda n: len(words & page_tokens[n]))
+            if coverage < 0.95 or best != cited:
+                failures.append(
+                    f"{doc_name} p. {cited} : couverture {coverage:.0%}, page la plus proche {best}"
+                )
+    assert not failures, f"{len(failures)}/{n_checked} preuves mal placées :\n" + "\n".join(
+        failures
+    )
