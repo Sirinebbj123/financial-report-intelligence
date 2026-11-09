@@ -15,9 +15,10 @@ jobs:
           python-version: "3.11"
           cache: pip
       # Dépendances légères seulement : les tests unitaires n'ont pas besoin des modèles.
+      # pymupdf et pdfplumber servent aux tests du parsing PDF (PDF générés à la volée).
       - name: Installer
         run: |
-          pip install pydantic python-dotenv rank-bm25 pytest ruff requests
+          pip install pydantic python-dotenv rank-bm25 pytest ruff requests pymupdf pdfplumber
           pip install -e . --no-deps
       - name: Lint
         run: ruff check .
