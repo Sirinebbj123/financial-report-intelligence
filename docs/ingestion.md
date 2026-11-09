@@ -70,7 +70,9 @@ Le libellé et ses valeurs restent dans le même chunk, ce qui aide BM25, les em
 
 ## Validation sur FinanceBench
 
-Sur 3M_2018_10K (160 pages) et AMD_2022_10K (121 pages), pour les 9 preuves FinanceBench de ces deux documents, la page `evidence_page_num + 1` extraite contient au moins 98 % des mots de la preuve, et c'est à chaque fois la page la plus proche de la preuve dans tout le document (9 sur 9). Le test `test_financebench_evidence_is_on_cited_page` refait cette vérification automatiquement dès que les données sont téléchargées (`python data/download_financebench.py`).
+Validation sur les **37 documents des 15 sociétés** du plan (10-K, 10-Q, 8-K et communiqués de résultats, de 2015 à 2024, soit 5 194 pages avec texte) : pour les **92 preuves sur 92** de FinanceBench, la page `evidence_page_num + 1` extraite contient au moins 95 % des mots de la preuve, et c'est la page du document qui ressemble le plus à la preuve. Les 37 PDF sont lus sans erreur.
+
+Le test `test_financebench_evidence_is_on_cited_page` refait cette vérification sur tous les PDF présents dans `data/pdfs` (environ 15 s pour les 37 documents) ; il est sauté si les données ne sont pas téléchargées. Il échoue bien si on oublie le décalage 0-indexé / 1-indexé (92 preuves mal placées sur 92). Certaines preuves FinanceBench collent les mots (`cashandcashequivalents`) : la comparaison se fait donc sans espaces ni ponctuation.
 
 | Moteur | Temps pour 3M_2018_10K (160 pages) |
 |---|---|
