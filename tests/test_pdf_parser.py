@@ -162,6 +162,9 @@ def sample_pdf(tmp_path: Path) -> Path:
     page.insert_text((72, 135), "Inventories")
     page.insert_text((400, 135), "(509)")
     page.insert_text((470, 135), "(387)")
+    page.insert_text((72, 150), "Accounts payable")
+    page.insert_text((400, 150), "408")
+    page.insert_text((470, 150), "24")
     page.insert_text((300, 780), "2")
 
     doc.new_page()  # page 3 blanche (comme une page scannée sans OCR)
@@ -290,6 +293,86 @@ def test_cli_missing_file_returns_error(tmp_path):
     from fri.ingestion.pdf_parser import main
 
     assert main([str(tmp_path / "absent.pdf")]) == 1
+
+
+# --------------------------------------------------------------------------- #
+# Tableaux et cache
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize("engine", ENGINES)
+def test_parse_pdf_extracts_tables(sample_pdf, engine):
+    _require(engine)
+    pages = parse_pdf(sample_pdf, engine=engine, tables=True)
+    page2 = next(p for p in pages if p.page == 2)
+    assert len(page2.tables) == 1
+    table = page2.tables[0]
+    assert (table.doc_name, table.page) == ("ACME_2022_10K", 2)
+    assert ("Depreciation and amortization", "1,488", "1,544") in table.rows
+    assert ("Inventories", "(509)", "(387)") in table.rows
+    assert pages[0].tables == ()
+
+
+def test_tables_are_off_by_default(sample_pdf):
+    _require("pymupdf")
+    assert all(p.tables == () for p in parse_pdf(sample_pdf))
+
+
+def test_page_dict_roundtrip_with_tables(sample_pdf):
+    _require("pymupdf")
+    for page in parse_pdf(sample_pdf, tables=True):
+        assert Page.from_dict(json.loads(json.dumps(page.to_dict()))) == page
+
+
+def test_cache_is_reused(sample_pdf, tmp_path, monkeypatch):
+    _require("pymupdf")
+    from fri.ingestion import pdf_parser
+
+    cache = tmp_path / "cache"
+    first = parse_pdf(sample_pdf, tables=True, cache_dir=cache)
+    assert len(list(cache.glob("ACME_2022_10K.*.jsonl"))) == 1
+
+    def fail(*args, **kwargs):
+        raise AssertionError("le PDF ne doit pas être reparsé")
+
+    monkeypatch.setattr(pdf_parser, "iter_pages", fail)
+    assert parse_pdf(sample_pdf, tables=True, cache_dir=cache) == first
+
+
+def test_cache_is_invalidated_by_options_and_content(sample_pdf, tmp_path):
+    pymupdf = pytest.importorskip("pymupdf")
+    cache = tmp_path / "cache"
+    with_tables = parse_pdf(sample_pdf, tables=True, cache_dir=cache)
+    without = parse_pdf(sample_pdf, tables=False, cache_dir=cache)
+    assert with_tables[1].tables and not without[1].tables
+
+    doc = pymupdf.open()
+    doc.new_page().insert_text((72, 72), "Nouveau contenu")
+    doc.save(sample_pdf)  # même nom de fichier, contenu différent
+    doc.close()
+    pages = parse_pdf(sample_pdf, cache_dir=cache)
+    assert [p.text for p in pages] == ["Nouveau contenu"]
+    assert len(list(cache.glob("ACME_2022_10K.*.jsonl"))) == 1  # anciennes versions retirées
+
+
+def test_corrupted_cache_is_ignored(sample_pdf, tmp_path):
+    _require("pymupdf")
+    cache = tmp_path / "cache"
+    expected = parse_pdf(sample_pdf, cache_dir=cache)
+    next(cache.glob("*.jsonl")).write_text("{pas du json", encoding="utf-8")
+    assert parse_pdf(sample_pdf, cache_dir=cache) == expected
+
+
+def test_cli_tables_and_cache(sample_pdf, tmp_path, capsys):
+    _require("pymupdf")
+    from fri.ingestion.pdf_parser import main
+
+    args = [str(sample_pdf), "--tables", "--show", "2", "--cache-dir", str(tmp_path / "c")]
+    assert main(args) == 0
+    out = capsys.readouterr().out
+    assert "1 tableaux" in out
+    assert "| Depreciation and amortization | 1,488 | 1,544 |" in out
+    assert main(args) == 0  # second appel : depuis le cache
 
 
 # --------------------------------------------------------------------------- #
