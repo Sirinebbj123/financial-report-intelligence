@@ -55,9 +55,9 @@ financial-report-intelligence/
 | Rôle | Membre | Dossiers |
 |---|---|---|
 | 1. Data & Retrieval | Maryem | `src/fri/ingestion/`, `src/fri/retrieval/` |
-| 2. Agent & MCP | Sirine | `src/fri/agent/`, `src/fri/mcp_server/` |
-| 3. Évaluation & Fine-tuning | Membre 3 | `evaluation/`, `finetuning/` |
-| 4. API, Web & DevOps | Membre 4 | `src/fri/api/`, `web/`, `.github/`, `Dockerfile` |
+| 2. Agent & MCP | Syrine | `src/fri/agent/`, `src/fri/mcp_server/` |
+| 3. Évaluation & Fine-tuning | Kenza | `evaluation/`, `finetuning/` |
+| 4. API, Web & DevOps | Wahbi | `src/fri/api/`, `web/`, `.github/`, `Dockerfile` |
 
 ## Installation
 
