@@ -17,3 +17,7 @@
 | | Retriever remplaçable (`set_retriever`) + retriever de démo en mémoire | Avancer sur l'agent et le MCP sans attendre l'index ; tests sans index ni clé API |
 | | Citations filtrées : seules celles qui pointent vers un passage fourni sont gardées | Une page inventée par le LLM ne doit jamais apparaître comme source |
 | | `mcp>=1.2,<2` | `FastMCP` a été renommé `MCPServer` dans `mcp` 2.x |
+| 2026-11 | Routeur par règles (années + mots-clés), pas par LLM | Gratuit, instantané et testable ; on passera au LLM si l'évaluation montre trop d'erreurs |
+| | Valeurs extraites par le LLM en JSON (`value`, `unit`, `passage`), converties en millions de dollars | Comparer des valeurs dans la même unité ; la citation pointe le passage d'où vient le chiffre |
+| | Réponse de comparaison rédigée par le code à partir de `compare_years` | Écart et pourcentage exacts, jamais recalculés par le LLM |
+| | Repli sur le RAG classique quand la comparaison échoue | Toujours donner une réponse citée plutôt qu'une erreur |
