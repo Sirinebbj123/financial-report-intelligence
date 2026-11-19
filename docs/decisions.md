@@ -12,3 +12,8 @@
 | | Détection des colonnes de texte par gouttière verticale, avec garde-fous « texte courant » | Lire une page en deux colonnes dans le bon ordre sans jamais casser une ligne de tableau (12 pages changées sur 5 194) |
 | | Tableaux reconstruits à partir des mots (libellé + nombres alignés à droite), pas avec `find_tables()` | `find_tables()` colle les mots et coupe les nombres sur les PDF FinanceBench |
 | | Cache JSONL des pages, clé = SHA-256 du PDF + options + `CACHE_VERSION` | Ne pas reparser les PDF à chaque indexation, sans risque de relire un cache périmé |
+| 2026-11 | Agent v1 : graphe LangGraph `retrieve -> answer`, routage repoussé à la tâche 4 | Avoir une réponse citée de bout en bout avant d'ajouter calcul et comparaison |
+| | L'agent appelle `search_filings`, la même fonction que l'outil MCP | Un seul chemin de recherche à tester et à évaluer |
+| | Retriever remplaçable (`set_retriever`) + retriever de démo en mémoire | Avancer sur l'agent et le MCP sans attendre l'index ; tests sans index ni clé API |
+| | Citations filtrées : seules celles qui pointent vers un passage fourni sont gardées | Une page inventée par le LLM ne doit jamais apparaître comme source |
+| | `mcp>=1.2,<2` | `FastMCP` a été renommé `MCPServer` dans `mcp` 2.x |
