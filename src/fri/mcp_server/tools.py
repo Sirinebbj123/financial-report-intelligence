@@ -7,7 +7,8 @@ utilisent un retriever en mémoire (`set_retriever`). Le jour où l'index est pr
 
 from __future__ import annotations
 
-from typing import Protocol
+from collections.abc import Callable
+from typing import Any, Protocol
 
 from fri.schemas import MetricValue, SearchResult, YearComparison
 
@@ -20,7 +21,31 @@ class Retriever(Protocol):
     ) -> list[SearchResult]: ...
 
 
+# extracteur(company, year, metric, results) -> MetricExtraction | None (voir fri.agent.metrics)
+MetricExtractor = Callable[[str, int, str, list[SearchResult]], Any]
+
+
+class MetricNotFoundError(LookupError):
+    """La valeur demandée n'a pas été trouvée dans les passages."""
+
+
 _retriever: Retriever | None = None
+_extractor: MetricExtractor | None = None
+
+
+def set_metric_extractor(extractor: MetricExtractor | None) -> None:
+    """Choisit l'extracteur de valeurs (None = le LLM du .env)."""
+    global _extractor
+    _extractor = extractor
+
+
+def get_metric_extractor() -> MetricExtractor:
+    global _extractor
+    if _extractor is None:
+        from fri.agent.metrics import LLMMetricExtractor
+
+        _extractor = LLMMetricExtractor()
+    return _extractor
 
 
 def set_retriever(retriever: Retriever | None) -> None:
@@ -80,10 +105,44 @@ def search_filings(
     return kept[:k]
 
 
-def get_financial_metric(company: str, year: int, metric: str) -> MetricValue:
-    """Renvoie une valeur chiffrée avec sa source."""
-    # TODO(Rôle 2, tâche 4) : search_filings + extraction de la valeur par le LLM
-    raise NotImplementedError
+def get_financial_metric(
+    company: str,
+    year: int,
+    metric: str,
+    k: int = 5,
+    extractor: MetricExtractor | None = None,
+) -> MetricValue:
+    """Renvoie une valeur chiffrée avec sa source.
+
+    Cherche les passages de la société et de l'année, puis l'extracteur (le LLM par
+    défaut) lit la valeur. La citation pointe le passage d'où vient la valeur.
+    Lève MetricNotFoundError si la valeur n'est pas trouvée.
+    """
+    from fri.agent.citations import citation_from_result
+
+    metric = metric.strip()
+    if not metric:
+        raise ValueError("La métrique (metric) est vide.")
+    if not company or not company.strip():
+        raise ValueError("La société (company) est obligatoire.")
+
+    results = search_filings(metric, company=company, year=year, k=k)
+    if not results:
+        raise MetricNotFoundError(f"Aucun passage pour {company} {year} sur « {metric} ».")
+
+    found = (extractor or get_metric_extractor())(company, year, metric, results)
+    if found is None:
+        raise MetricNotFoundError(f"« {metric} » introuvable pour {company} {year}.")
+
+    source = results[found.passage - 1]
+    return MetricValue(
+        company=source.chunk.metadata.company,
+        year=year,
+        metric=metric,
+        value=found.value,
+        unit=found.unit,
+        citation=citation_from_result(source),
+    )
 
 
 def compute_comparison(a: MetricValue, b: MetricValue) -> YearComparison:
@@ -95,8 +154,18 @@ def compute_comparison(a: MetricValue, b: MetricValue) -> YearComparison:
     )
 
 
-def compare_years(company: str, metric: str, year_a: int, year_b: int) -> YearComparison:
-    """Compare une métrique d'une société entre deux années."""
-    a = get_financial_metric(company, year_a, metric)
-    b = get_financial_metric(company, year_b, metric)
+def compare_years(
+    company: str,
+    metric: str,
+    year_a: int,
+    year_b: int,
+    extractor: MetricExtractor | None = None,
+) -> YearComparison:
+    """Compare une métrique d'une société entre deux années (year_a = année de référence)."""
+    if year_a == year_b:
+        raise ValueError("Les deux années à comparer doivent être différentes.")
+    a = get_financial_metric(company, year_a, metric, extractor=extractor)
+    b = get_financial_metric(company, year_b, metric, extractor=extractor)
+    if a.unit.casefold() != b.unit.casefold():
+        raise ValueError(f"Unités différentes : {a.unit} ({year_a}) et {b.unit} ({year_b}).")
     return compute_comparison(a, b)
