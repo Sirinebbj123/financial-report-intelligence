@@ -2,7 +2,7 @@
 
 Usage :
     python -m fri.mcp_server.server          # vrai index (transport stdio)
-    python -m fri.mcp_server.server --demo   # passages de démo, sans index
+    python -m fri.mcp_server.server --demo   # passages de démo, sans index ni clé API
 """
 
 from __future__ import annotations
@@ -31,22 +31,30 @@ def search_filings(
 
 @mcp.tool()
 def get_financial_metric(company: str, year: int, metric: str) -> dict:
-    """Renvoie la valeur d'une métrique financière (ex. total revenue) et sa source."""
+    """Renvoie la valeur d'une métrique financière (ex. "total revenue") et sa source.
+
+    La valeur est en millions de dollars ; `citation` donne la page à citer.
+    """
     return tools.get_financial_metric(company, year, metric).model_dump(mode="json")
 
 
 @mcp.tool()
 def compare_years(company: str, metric: str, year_a: int, year_b: int) -> dict:
-    """Compare une métrique entre deux années : écart et pourcentage d'évolution."""
+    """Compare une métrique entre deux années : écart et pourcentage d'évolution.
+
+    `year_a` est l'année de référence : delta = valeur(year_b) - valeur(year_a).
+    """
     return tools.compare_years(company, metric, year_a, year_b).model_dump(mode="json")
 
 
 def main(argv: list[str] | None = None) -> None:
     argv = sys.argv[1:] if argv is None else argv
     if "--demo" in argv:
+        from fri.agent.metrics import RegexMetricExtractor
         from fri.mcp_server.demo import demo_retriever
 
         tools.set_retriever(demo_retriever())
+        tools.set_metric_extractor(RegexMetricExtractor())  # pas de LLM en démo
     mcp.run()
 
 
