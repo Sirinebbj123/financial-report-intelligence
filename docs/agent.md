@@ -54,7 +54,7 @@ Le LLM est choisi dans `.env` (`LLM_PROVIDER` = `openai`, `groq`, `mistral` ou `
 
 ## Le retriever est remplaçable
 
-Tant que l'index (chunking + Chroma + BM25, rôle 1) n'est pas prêt, les outils tournent sur un retriever en mémoire avec quelques passages de démo (`fri/mcp_server/demo.py`). De même, l'extracteur de valeurs se remplace avec `tools.set_metric_extractor(...)`.
+Par défaut, les outils chargent l'index hybride (BM25 + ChromaDB) construit par `python -m fri.ingestion.indexer` (voir [`retrieval.md`](retrieval.md)). Pour la démo et les tests, un retriever en mémoire avec quelques passages remplace l'index (`fri/mcp_server/demo.py`). De même, l'extracteur de valeurs se remplace avec `tools.set_metric_extractor(...)`.
 
 ```python
 from fri.mcp_server import tools
@@ -64,9 +64,9 @@ tools.set_retriever(demo_retriever())   # démo / tests
 tools.set_retriever(None)               # revenir au vrai index
 ```
 
-Quand `fri.ingestion.indexer` sera terminé, il restera à compléter `_load_index_retriever()` dans `tools.py` pour renvoyer `HybridRetriever(bm25, vector)`. L'agent, le serveur MCP et les tests ne changent pas.
+`_load_index_retriever()` dans `tools.py` renvoie `HybridRetriever.load()` : sans `data/index/manifest.json`, un message explique de lancer l'indexeur ou le mode `--demo`.
 
-`search_filings` refiltre toujours les résultats par société (sans tenir compte des majuscules) et par année : un passage d'une autre société ne peut pas sortir, même si le retriever filtre mal.
+`search_filings` refiltre toujours les résultats par société (forme normalisée : `American Express` = `AMERICANEXPRESS`) et par année : un passage d'une autre société ne peut pas sortir, même si le retriever filtre mal.
 
 ## Démo MCP
 
@@ -81,20 +81,52 @@ Pour tester avec MCP Inspector :
 npx @modelcontextprotocol/inspector@latest python -m fri.mcp_server.server --demo
 ```
 
-Dans Claude Desktop, ajouter dans `claude_desktop_config.json` :
+Sans `--demo`, l'Inspector utilise le vrai index (section suivante).
+
+En mode démo, les 3 outils marchent sans clé API : `get_financial_metric("3M", 2018, "total revenue")` renvoie 32 765 (p. 42) et `compare_years("3M", "total revenue", 2017, 2018)` renvoie un écart de +1 108 (+3,5 %).
+
+## Sur le vrai index
+
+```bash
+python -m fri.ingestion.indexer            # construit data/index (voir retrieval.md)
+python -m fri.mcp_server.server            # sans --demo : lit data/index
+```
+
+Au démarrage, le serveur charge l'index et le modèle d'embeddings, puis écrit `[fri] Index chargé (N chunks).` sur stderr (stdout est réservé au protocole MCP). Si l'index manque, il démarre quand même et chaque outil renvoie le message qui explique de lancer l'indexeur.
+
+`DATA_DIR` et `INDEX_DIR` relatifs sont pris depuis la racine du dépôt, pas depuis le dossier courant : Claude Desktop peut lancer le serveur depuis n'importe où. Le `.env` est aussi trouvé depuis le dépôt.
+
+`get_financial_metric` et `compare_years` utilisent le LLM du `.env` pour lire les valeurs : il faut une clé API. `search_filings` marche sans.
+
+## Claude Desktop (Windows)
+
+1. Construire l'index une fois (cela télécharge aussi `bge-small`, que le serveur réutilise) : `python -m fri.ingestion.indexer`.
+2. Claude Desktop : **Settings > Developer > Edit Config**. Le fichier ouvert est `claude_desktop_config.json` (en général `%APPDATA%\Claude\claude_desktop_config.json`).
+3. Coller (adapter le chemin du dépôt ; les `\` sont doublés en JSON) :
 
 ```json
 {
   "mcpServers": {
     "financial-report-intelligence": {
-      "command": "python",
-      "args": ["-m", "fri.mcp_server.server", "--demo"]
+      "command": "C:\\financial-report-intelligence\\.venv\\Scripts\\python.exe",
+      "args": ["-m", "fri.mcp_server.server"],
+      "env": { "PYTHONPATH": "C:\\financial-report-intelligence\\src" }
+    },
+    "fri-demo": {
+      "command": "C:\\financial-report-intelligence\\.venv\\Scripts\\python.exe",
+      "args": ["-m", "fri.mcp_server.server", "--demo"],
+      "env": { "PYTHONPATH": "C:\\financial-report-intelligence\\src" }
     }
   }
 }
 ```
 
-En mode démo, les 3 outils marchent sans clé API : `get_financial_metric("3M", 2018, "total revenue")` renvoie 32 765 (p. 42) et `compare_years("3M", "total revenue", 2017, 2018)` renvoie un écart de +1 108 (+3,5 %).
+Utiliser le `python.exe` du `.venv` (il a les dépendances) ; `"command": "python"` tomberait sur un autre Python. `PYTHONPATH` permet de trouver le paquet `fri` même s'il n'a pas été installé avec `pip install -e .`. Le serveur `fri-demo` est facultatif.
+
+4. Quitter complètement Claude Desktop (icône près de l'horloge > Quit) puis le relancer. Les outils apparaissent dans le menu des outils (icône des réglages sous la zone de saisie).
+5. Essayer : « Cherche dans les rapports de 3M de 2018 le montant des dépenses d'investissement (capital expenditure) et cite la page. » Claude appelle `search_filings` et cite `[3M, 2018, p. X]`.
+
+En cas de souci, les logs sont dans `%APPDATA%\Claude\logs\mcp-server-financial-report-intelligence.log` : on y voit `[fri] Index chargé (...)` ou l'erreur.
 
 Sous Windows, utiliser l'Inspector v2 (`@latest`) : l'interface web de la v0.15 renvoie « Invalid request parameters » sur `tools/list`. Si `npx` échoue avec `ENOENT ... AppData\Roaming\npm`, créer ce dossier (`mkdir "$env:APPDATA\npm"`).
 
@@ -108,5 +140,4 @@ Ce qui est vérifié : filtres société / année, garde-fou contre un retriever
 
 ## Suite
 
-- Brancher le vrai index dans `_load_index_retriever()` dès que `fri.ingestion.indexer` est prêt.
 - Mesurer avec FinanceBench (rôle 3) : exactitude des valeurs extraites et taux de bonnes routes ; si les règles du routeur se trompent souvent, passer à un routeur LLM (`ROUTER_PROMPT`).

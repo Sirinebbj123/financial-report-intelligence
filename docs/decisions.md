@@ -29,3 +29,6 @@
 | | BM25 reconstruit au chargement depuis `chunks.jsonl`, pas de pickle | Quelques secondes, lisible, pas de souci de version de `rank_bm25` ni de pickle à charger |
 | | Société comparée en forme normalisée (`company_key`) | `American Express` (questions) = `AMERICANEXPRESS` (noms des PDF) |
 | | Reranker `bge-reranker-base` sur 20 candidats, désactivé par défaut | ~1 Go et lent sur CPU ; on l'active si l'évaluation montre un gain |
+| 2026-11 | `_load_index_retriever()` renvoie `HybridRetriever.load()` ; index absent = pas de `manifest.json` | Un index à moitié construit n'est jamais chargé |
+| | Le serveur MCP charge l'index et le modèle au démarrage, et démarre quand même si l'index manque | Premier appel rapide dans Claude Desktop ; erreur visible dans les logs, message clair dans l'outil |
+| | `DATA_DIR` / `INDEX_DIR` relatifs résolus depuis la racine du dépôt | Claude Desktop lance le serveur depuis un autre dossier que le dépôt |
