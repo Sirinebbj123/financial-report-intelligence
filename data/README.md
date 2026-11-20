@@ -12,5 +12,8 @@ Après exécution :
 data/
 ├── financebench_open_source.jsonl   # 150 questions annotées
 ├── pdfs/                            # rapports 10-K / 10-Q
-└── index/                           # index vectoriel + BM25 (généré)
+├── cache/pages/                     # texte des PDF déjà parsés (généré)
+└── index/                           # index ChromaDB + chunks BM25 (généré)
 ```
+
+Construire l'index : `python -m fri.ingestion.indexer` (voir `docs/retrieval.md`).
