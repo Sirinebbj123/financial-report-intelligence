@@ -32,7 +32,12 @@
 | 2026-11 | `_load_index_retriever()` renvoie `HybridRetriever.load()` ; index absent = pas de `manifest.json` | Un index à moitié construit n'est jamais chargé |
 | | Le serveur MCP charge l'index et le modèle au démarrage, et démarre quand même si l'index manque | Premier appel rapide dans Claude Desktop ; erreur visible dans les logs, message clair dans l'outil |
 | | `DATA_DIR` / `INDEX_DIR` relatifs résolus depuis la racine du dépôt | Claude Desktop lance le serveur depuis un autre dossier que le dépôt |
+
 | 2026-11 | Mise à jour incrémentale : empreinte SHA-256 de chaque PDF dans `manifest.json`, `--update` ne recalcule que les rapports nouveaux ou modifiés | Ajouter un rapport prend une minute au lieu de reconstruire 28 000 chunks (~36 min) |
 | | Un rapport est remplacé en entier (suppression de ses chunks dans Chroma et `chunks.jsonl`, puis ajout) | Ids de chunks stables et aucun reste de l'ancienne version, même si le nombre de pages change |
 | | Réglages de l'index existant (modèle, taille des chunks) réutilisés par `--update` | Jamais deux réglages mélangés dans le même index |
 | | Pas de manifeste pendant la mise à jour ; `--remove` mémorisé (`excluded`) ; PDF disparus retirés seulement avec `--prune` | Un index à moitié modifié n'est jamais chargé ; un rapport retiré ne revient pas tout seul ; pas de perte si un PDF est déplacé |
+
+| 2026-11 | Client MCP en Python (`fri.mcp_server.client`, SDK `mcp`) en plus de MCP Inspector | Démonstration reproductible en une commande, testée en CI, avec une trace Markdown pour le rapport |
+| | Le client lance le serveur comme Claude Desktop (sous-processus, stdio) et lui transmet l'environnement | Même chemin que les vrais clients ; `INDEX_DIR` et les clés API du terminal sont pris en compte |
+
