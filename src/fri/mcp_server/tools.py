@@ -107,11 +107,49 @@ def search_filings(
     return kept[:k]
 
 
+# Les rapports n'emploient pas toujours le mot de la question : 3M écrit « Net sales »,
+# pas « total revenue ». On ajoute les synonymes et le nom de l'état financier à la
+# recherche pour que la ligne du tableau (compte de résultat, flux de trésorerie) remonte.
+METRIC_HINTS: dict[str, str] = {
+    "revenue": "total revenue net sales revenues consolidated statement of income",
+    "sales": "net sales total revenue consolidated statement of income",
+    "net income": "net income attributable consolidated statement of income",
+    "operating income": "operating income consolidated statement of income",
+    "gross profit": "gross profit gross margin cost of sales consolidated statement of income",
+    "capital expenditure": "purchases of property plant and equipment capital expenditures "
+    "statement of cash flows",
+    "capex": "purchases of property plant and equipment capital expenditures "
+    "statement of cash flows",
+    "operating cash flow": "net cash provided by operating activities statement of cash flows",
+    "cash from operations": "net cash provided by operating activities statement of cash flows",
+    "dividend": "dividends paid statement of cash flows",
+    "total assets": "total assets consolidated balance sheet",
+    "inventory": "inventories consolidated balance sheet",
+}
+
+
+def metric_queries(metric: str) -> list[str]:
+    """Requêtes pour trouver une métrique : avec synonymes d'abord, puis le mot seul."""
+    lowered = metric.lower()
+    hints = [h for key, h in METRIC_HINTS.items() if key in lowered]
+    expanded = " ".join([metric, *dict.fromkeys(hints)]) if hints else ""
+    return [q for q in (expanded, metric) if q]
+
+
+def _search_metric(metric: str, company: str, year: int, k: int) -> list[SearchResult]:
+    """Fusionne les résultats des requêtes de ``metric_queries``, sans doublon."""
+    merged: dict[str, SearchResult] = {}
+    for query in metric_queries(metric):
+        for r in search_filings(query, company=company, year=year, k=k):
+            merged.setdefault(r.chunk.id, r)
+    return list(merged.values())[:k]
+
+
 def get_financial_metric(
     company: str,
     year: int,
     metric: str,
-    k: int = 5,
+    k: int = 8,
     extractor: MetricExtractor | None = None,
 ) -> MetricValue:
     """Renvoie une valeur chiffrée avec sa source.
@@ -128,7 +166,7 @@ def get_financial_metric(
     if not company or not company.strip():
         raise ValueError("La société (company) est obligatoire.")
 
-    results = search_filings(metric, company=company, year=year, k=k)
+    results = _search_metric(metric, company, year, k)
     if not results:
         raise MetricNotFoundError(f"Aucun passage pour {company} {year} sur « {metric} ».")
 
