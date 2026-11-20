@@ -27,6 +27,17 @@ Chaque lancement **reconstruit l'index de zéro**. Contenu de `data/index/` :
 | `chunks.jsonl` | tous les chunks ; relus au chargement pour reconstruire BM25 (quelques secondes) |
 | `manifest.json` | modèle d'embeddings, préfixe des questions, taille des chunks, documents indexés. Écrit en dernier : sans lui, l'index est considéré comme absent |
 
+## Mettre à jour l'index
+
+Pas besoin de tout reconstruire pour ajouter, remplacer ou retirer un rapport :
+
+```bash
+python -m fri.ingestion.indexer --update                      # PDF nouveaux ou modifiés
+python -m fri.ingestion.indexer --remove PFIZER_2021_10K      # retirer un rapport
+```
+
+Détails : [`index-update.md`](index-update.md).
+
 ## Chunks et métadonnées (`fri.ingestion.chunking`)
 
 - `chunk_page(page, chunk_size=800, overlap=100)` : un chunk ne dépasse jamais une page, donc sa page est toujours la bonne page à citer.

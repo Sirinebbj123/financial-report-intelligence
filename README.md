@@ -75,6 +75,7 @@ python data/download_financebench.py --companies 15
 
 ```bash
 python -m fri.ingestion.indexer          # construit l'index
+python -m fri.ingestion.indexer --update # met à jour : PDF nouveaux ou modifiés
 uvicorn fri.api.main:app --reload        # API sur http://localhost:8000
 streamlit run web/app.py                 # interface
 python -m fri.mcp_server.server          # serveur MCP (stdio)
