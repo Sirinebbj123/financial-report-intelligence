@@ -1,7 +1,7 @@
 """Serveur MCP (SDK Python `mcp`, FastMCP).
 
 Usage :
-    python -m fri.mcp_server.server          # vrai index (transport stdio)
+    python -m fri.mcp_server.server          # vrai index (data/index, transport stdio)
     python -m fri.mcp_server.server --demo   # passages de démo, sans index ni clé API
 """
 
@@ -55,7 +55,27 @@ def main(argv: list[str] | None = None) -> None:
 
         tools.set_retriever(demo_retriever())
         tools.set_metric_extractor(RegexMetricExtractor())  # pas de LLM en démo
+    else:
+        preload_index()
     mcp.run()
+
+
+def preload_index() -> bool:
+    """Charge l'index et le modèle au démarrage : le premier appel d'outil est rapide et
+    une erreur (index absent) apparaît tout de suite dans les logs.
+
+    Le serveur démarre quand même si l'index manque : chaque outil renverra alors le
+    message qui explique quoi faire. Tout part sur stderr : stdout sert au protocole MCP.
+    """
+    try:
+        retriever = tools.get_retriever()
+        retriever.search("total revenue", k=1)  # charge aussi le modèle d'embeddings
+    except Exception as err:  # index absent, modèle introuvable...
+        print(f"[fri] Index non chargé : {err}", file=sys.stderr)
+        return False
+    n = len(getattr(retriever, "vector", ()) or ())
+    print(f"[fri] Index chargé ({n} chunks).", file=sys.stderr)
+    return True
 
 
 if __name__ == "__main__":
