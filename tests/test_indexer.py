@@ -123,3 +123,124 @@ def test_command_line_search(index, monkeypatch, capsys):
     assert hybrid.main(["total revenue", "--company", "3M", "--year", "2018", "-k", "1"]) == 0
     out = capsys.readouterr().out
     assert "1. [3M, 2018, p. 2]" in out and "$32,765 million" in out
+
+
+# ------------------------------------------------------------------ mise à jour
+def _update(tmp_path, pdf_dir, index_dir, **kwargs):
+    from fri.ingestion.indexer import update_index
+
+    return update_index(
+        pdf_dir, index_dir, cache_dir=tmp_path / "cache", embedder=FakeEmbedder(), **kwargs
+    )
+
+
+def _pages_in_chroma(index_dir):
+    from fri.retrieval.vector import open_client
+
+    collection = open_client(index_dir).get_collection("filings")
+    records = collection.get(include=["metadatas"])["metadatas"]
+    return sorted((r["doc_name"], r["page"]) for r in records)
+
+
+def test_manifest_records_file_fingerprints(index):
+    _, manifest = index
+    files = manifest["files"]
+    assert set(files) == set(DOCS)
+    assert len(files["3M_2018_10K"]["sha256"]) == 64
+    assert files["3M_2018_10K"]["chunks"] == 3
+
+
+def test_update_without_changes_does_nothing(tmp_path, pdf_dir, index):
+    index_dir, before = index
+    manifest = _update(tmp_path, pdf_dir, index_dir)
+    assert manifest["changes"]["added"] == manifest["changes"]["updated"] == []
+    assert manifest["changes"]["unchanged"] == sorted(DOCS)
+    assert manifest["n_chunks"] == before["n_chunks"]
+
+
+def test_update_adds_a_new_report(tmp_path, pdf_dir, index):
+    index_dir, _ = index
+    write_pdf(pdf_dir / "AMD_2022_10K.pdf", ["Net revenue was $23,601 million in 2022."])
+    manifest = _update(tmp_path, pdf_dir, index_dir)
+    assert manifest["changes"]["added"] == ["AMD_2022_10K"]
+    assert manifest["n_documents"] == 3 and manifest["n_chunks"] == 6
+    assert read_manifest(index_dir)["documents"] == sorted([*DOCS, "AMD_2022_10K"])
+    assert ("AMD_2022_10K", 1) in _pages_in_chroma(index_dir)
+
+    from fri.retrieval.hybrid import HybridRetriever
+
+    retriever = HybridRetriever.load(index_dir, embedder=FakeEmbedder(), use_reranker=False)
+    [best] = retriever.search("net revenue", company="AMD", year=2022, k=1)
+    assert best.chunk.metadata.doc_name == "AMD_2022_10K"
+
+
+def test_update_replaces_a_modified_report(tmp_path, pdf_dir, index):
+    index_dir, _ = index
+    write_pdf(pdf_dir / "3M_2018_10K.pdf", ["Restated: total revenue was $33,000 million."])
+    manifest = _update(tmp_path, pdf_dir, index_dir)
+    assert manifest["changes"]["updated"] == ["3M_2018_10K"]
+    texts = [c.text for c in load_chunks(index_dir) if c.metadata.doc_name == "3M_2018_10K"]
+    assert len(texts) == 1 and "33,000" in texts[0]
+    assert [p for p in _pages_in_chroma(index_dir) if p[0] == "3M_2018_10K"] == [("3M_2018_10K", 1)]
+    assert manifest["n_chunks"] == 3
+
+
+def test_remove_and_prune(tmp_path, pdf_dir, index):
+    index_dir, _ = index
+    manifest = _update(tmp_path, pdf_dir, index_dir, remove=["AMERICANEXPRESS_2022_10K"])
+    assert manifest["changes"]["removed"] == ["AMERICANEXPRESS_2022_10K"]
+    assert {d for d, _ in _pages_in_chroma(index_dir)} == {"3M_2018_10K"}
+
+    (pdf_dir / "3M_2018_10K.pdf").unlink()
+    kept = _update(tmp_path, pdf_dir, index_dir)  # sans --prune : gardé, seulement signalé
+    assert kept["documents"] == ["3M_2018_10K"]  # le rapport retiré ne revient pas
+    assert read_manifest(index_dir)["excluded"] == ["AMERICANEXPRESS_2022_10K"]
+    write_pdf(pdf_dir / "AMD_2022_10K.pdf", ["Net revenue was $23,601 million in 2022."])
+    pruned = _update(tmp_path, pdf_dir, index_dir, prune=True)
+    assert pruned["changes"]["removed"] == ["3M_2018_10K"]
+    assert pruned["documents"] == ["AMD_2022_10K"]
+    back = _update(tmp_path, pdf_dir, index_dir, docs=["AMERICANEXPRESS_2022_10K"])
+    assert back["changes"]["added"] == ["AMERICANEXPRESS_2022_10K"]
+    assert read_manifest(index_dir)["excluded"] == []
+
+
+def test_update_old_index_without_fingerprints(tmp_path, pdf_dir, index):
+    index_dir, _ = index
+    manifest = read_manifest(index_dir)
+    del manifest["files"]
+    (index_dir / MANIFEST).write_text(json.dumps(manifest), encoding="utf-8")
+
+    first = _update(tmp_path, pdf_dir, index_dir)  # enregistre les empreintes, rien à recalculer
+    assert first["changes"]["updated"] == []
+    assert set(read_manifest(index_dir)["files"]) == set(DOCS)
+    forced = _update(tmp_path, pdf_dir, index_dir, docs=["3M_2018_10K"])
+    assert forced["changes"]["updated"] == ["3M_2018_10K"]
+    assert forced["n_chunks"] == 5
+
+
+def test_update_errors(tmp_path, pdf_dir, index):
+    index_dir, _ = index
+    with pytest.raises(FileNotFoundError):
+        _update(tmp_path, pdf_dir, index_dir, docs=["NOPE_2020_10K"])
+    with pytest.raises(ValueError):
+        _update(tmp_path, pdf_dir, index_dir, remove=["NOPE_2020_10K"])
+    with pytest.raises(FileNotFoundError):
+        _update(tmp_path, pdf_dir, tmp_path / "pas-d-index")
+
+
+def test_cli_update(tmp_path, pdf_dir, index, capsys, monkeypatch):
+    from fri.ingestion import indexer
+
+    index_dir, _ = index
+    real = indexer.update_index
+    monkeypatch.setattr(
+        indexer,
+        "update_index",
+        lambda *a, **k: real(*a, cache_dir=tmp_path / "cache", embedder=FakeEmbedder(), **k),
+    )
+    write_pdf(pdf_dir / "AMD_2022_10K.pdf", ["Net revenue was $23,601 million in 2022."])
+    code = indexer.main(["--pdf-dir", str(pdf_dir), "--index-dir", str(index_dir), "--update"])
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "Ajoutés : AMD_2022_10K" in out
+    assert "Redémarrez" in out
