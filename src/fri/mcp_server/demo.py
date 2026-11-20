@@ -1,8 +1,8 @@
-"""Retriever en mémoire pour la démo et les tests, en attendant le vrai index.
+"""Retriever en mémoire pour la démo et les tests (sans index ni téléchargement).
 
 Il classe les passages par nombre de mots communs avec la question. Ce n'est pas
 un vrai moteur de recherche : il sert seulement à faire tourner les outils MCP
-et l'agent de bout en bout avant que l'index vectoriel + BM25 soit prêt.
+et l'agent de bout en bout sans construire l'index vectoriel + BM25.
 """
 
 from __future__ import annotations

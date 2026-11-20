@@ -7,6 +7,8 @@ tests utilisent un faux modèle, sans téléchargement.
 
 from __future__ import annotations
 
+import logging
+import time
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Protocol
@@ -15,6 +17,8 @@ from fri.ingestion.chunking import search_text
 from fri.ingestion.metadata import company_key
 from fri.retrieval.filters import normalize_filters
 from fri.schemas import Chunk, ChunkMetadata, DocType, SearchResult
+
+logger = logging.getLogger(__name__)
 
 COLLECTION = "filings"
 BATCH_SIZE = 256
@@ -57,7 +61,7 @@ class SentenceTransformerEmbedder:
             list(texts),
             batch_size=32,
             normalize_embeddings=True,
-            show_progress_bar=len(texts) > 500,
+            show_progress_bar=False,
         )
         return vectors.tolist()
 
@@ -138,14 +142,30 @@ class VectorRetriever:
         return self.collection.count()
 
     def add(self, chunks: Sequence[Chunk], batch_size: int = BATCH_SIZE) -> None:
-        """Ajoute (ou remplace, même id) des chunks dans la collection."""
-        for start in range(0, len(chunks), batch_size):
+        """Ajoute (ou remplace, même id) des chunks dans la collection.
+
+        Affiche l'avancement après chaque paquet (le calcul peut durer plusieurs minutes).
+        """
+        total = len(chunks)
+        start_time = time.perf_counter()
+        for start in range(0, total, batch_size):
             batch = list(chunks[start : start + batch_size])
             self.collection.upsert(
                 ids=[c.id for c in batch],
                 documents=[c.text for c in batch],
                 metadatas=[chunk_to_record(c) for c in batch],
                 embeddings=self.embedder.embed_documents([search_text(c) for c in batch]),
+            )
+            done = start + len(batch)
+            elapsed = time.perf_counter() - start_time
+            remaining = elapsed / done * (total - done)
+            logger.info(
+                "Embeddings : %d/%d chunks (%d %%), %.0f s écoulées, ~%.0f s restantes",
+                done,
+                total,
+                done * 100 // total,
+                elapsed,
+                remaining,
             )
 
     def search(self, query: str, k: int = 8, filters: dict | None = None) -> list[SearchResult]:
