@@ -21,3 +21,11 @@
 | | Valeurs extraites par le LLM en JSON (`value`, `unit`, `passage`), converties en millions de dollars | Comparer des valeurs dans la même unité ; la citation pointe le passage d'où vient le chiffre |
 | | Réponse de comparaison rédigée par le code à partir de `compare_years` | Écart et pourcentage exacts, jamais recalculés par le LLM |
 | | Repli sur le RAG classique quand la comparaison échoue | Toujours donner une réponse citée plutôt qu'une erreur |
+| 2026-11 | Chunks de 800 caractères, chevauchement 100, jamais à cheval sur deux pages | La page du chunk est toujours la page citée ; les lignes de tableau restent entières |
+| | Découpage maison (paragraphe > ligne > phrase > mot), sans LangChain | Même principe que `RecursiveCharacterTextSplitter`, sans dépendance de plus ni surprise de version |
+| | En-tête `Société Année Type` ajouté au texte indexé, pas au texte cité | Aide BM25 et les embeddings quand la question nomme la société sans filtre |
+| | Embeddings calculés par nous, `embedding_function=None` dans Chroma, distance cosinus | Même modèle garanti à l'indexation et à la recherche ; Chroma ne télécharge jamais son modèle par défaut |
+| | Modèle d'embeddings lu dans `manifest.json` au chargement | Changer `EMBEDDING_MODEL` sans réindexer ne casse pas la recherche |
+| | BM25 reconstruit au chargement depuis `chunks.jsonl`, pas de pickle | Quelques secondes, lisible, pas de souci de version de `rank_bm25` ni de pickle à charger |
+| | Société comparée en forme normalisée (`company_key`) | `American Express` (questions) = `AMERICANEXPRESS` (noms des PDF) |
+| | Reranker `bge-reranker-base` sur 20 candidats, désactivé par défaut | ~1 Go et lent sur CPU ; on l'active si l'évaluation montre un gain |
