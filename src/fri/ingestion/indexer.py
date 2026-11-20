@@ -178,6 +178,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--embedding-model", default=settings.embedding_model)
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(message)s")
+    for noisy in ("httpx", "huggingface_hub", "sentence_transformers"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)  # pas de log par requête HTTP
 
     print(f"Indexation des PDF de {args.pdf_dir} vers {args.index_dir}")
     manifest = build_index(

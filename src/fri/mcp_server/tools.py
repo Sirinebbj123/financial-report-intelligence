@@ -1,8 +1,8 @@
 """Logique des 3 outils MCP, indépendante du transport (testable sans serveur).
 
-Le retriever est remplaçable : tant que l'index n'existe pas, les tests et la démo
-utilisent un retriever en mémoire (`set_retriever`). Le jour où l'index est prêt,
-`get_retriever()` charge le vrai `HybridRetriever` sans autre changement.
+Le retriever est remplaçable : les tests et la démo utilisent un retriever en
+mémoire (`set_retriever`). Sinon, `get_retriever()` charge le vrai `HybridRetriever`
+(BM25 + ChromaDB) construit par `python -m fri.ingestion.indexer`.
 """
 
 from __future__ import annotations
@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, Protocol
 
+from fri.ingestion.metadata import company_key
 from fri.schemas import MetricValue, SearchResult, YearComparison
 
 
@@ -65,20 +66,21 @@ def get_retriever() -> Retriever:
 def _load_index_retriever() -> Retriever:
     """Charge le HybridRetriever construit par `python -m fri.ingestion.indexer`."""
     from fri.config import settings
+    from fri.ingestion.indexer import MANIFEST
+    from fri.retrieval.hybrid import HybridRetriever
 
-    if not settings.index_dir.exists():
+    if not (settings.index_dir / MANIFEST).is_file():
         raise RuntimeError(
             f"Index introuvable dans {settings.index_dir}. Lance d'abord "
             "`python -m fri.ingestion.indexer`, ou utilise la démo : "
             "`python -m fri.mcp_server.server --demo`."
         )
-    # TODO(Rôle 1 + 2) : charger BM25Retriever et VectorRetriever depuis l'index
-    # une fois indexer.py terminé, puis renvoyer HybridRetriever(bm25, vector).
-    raise NotImplementedError("Chargement de l'index : en attente de fri.ingestion.indexer")
+    return HybridRetriever.load(settings.index_dir)
 
 
 def _same_company(a: str, b: str) -> bool:
-    return a.strip().casefold() == b.strip().casefold()
+    """'American Express' et 'AMERICANEXPRESS' désignent la même société."""
+    return company_key(a) == company_key(b)
 
 
 def search_filings(
