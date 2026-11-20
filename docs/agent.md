@@ -85,6 +85,15 @@ Sans `--demo`, l'Inspector utilise le vrai index (section suivante).
 
 En mode démo, les 3 outils marchent sans clé API : `get_financial_metric("3M", 2018, "total revenue")` renvoie 32 765 (p. 42) et `compare_years("3M", "total revenue", 2017, 2018)` renvoie un écart de +1 108 (+3,5 %).
 
+## Client MCP de démonstration
+
+```bash
+python -m fri.mcp_server.client --demo                          # sans index ni clé API
+python -m fri.mcp_server.client --markdown docs/mcp_demo.md     # vrai index, trace pour le rapport
+```
+
+Le client lance le serveur, liste ses outils et les appelle. Détails : [`mcp-client.md`](mcp-client.md).
+
 ## Sur le vrai index
 
 ```bash

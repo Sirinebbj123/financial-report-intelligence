@@ -78,6 +78,7 @@ python -m fri.ingestion.indexer          # construit l'index
 uvicorn fri.api.main:app --reload        # API sur http://localhost:8000
 streamlit run web/app.py                 # interface
 python -m fri.mcp_server.server          # serveur MCP (stdio)
+python -m fri.mcp_server.client          # client MCP : appelle les 3 outils
 pytest                                   # tests
 ```
 
